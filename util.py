@@ -111,10 +111,21 @@ def pose_normalized(pose_json):
                 ('hand_right_keypoints_2d', W, H),
             ]:
                 kpts = figure.get(key)
-                if kpts and max(kpts) > 2.0:
+                if not kpts:
+                    continue
+                if max(kpts) > 2.0:
                     for i in range(0, len(kpts), 3):
                         kpts[i] = kpts[i] / float(dim_x)
                         kpts[i+1] = kpts[i+1] / float(dim_y)
+                # Clamp x,y to [0,1] so the editor's normalization detection
+                # (bn.every(v => Math.abs(v) <= 1)) always passes. Without this,
+                # keypoints outside the canvas boundary (e.g. y > canvas_height)
+                # produce normalized values > 1.0 which cause the editor to
+                # misidentify the array as pixel-space, placing all body points
+                # at sub-pixel coordinates in the upper-left corner.
+                for i in range(0, len(kpts), 3):
+                    kpts[i] = max(0.0, min(1.0, kpts[i]))
+                    kpts[i+1] = max(0.0, min(1.0, kpts[i+1]))
     return json.dumps(images)
 
 def scale(point, scale_factor, pivot):
