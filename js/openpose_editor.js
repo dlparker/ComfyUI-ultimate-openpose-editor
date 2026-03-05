@@ -184,6 +184,18 @@ if (app && ComfyDialog && $el && ComfyApp) {
             if (!api) return;
             api.addEventListener("openpose_editor_event", ({ detail }) => {
                 if (detail?.type !== "keypoint_invalidated") return;
+
+                // Clear the POSE_JSON widget so the stale edited pose
+                // doesn't get re-submitted on subsequent runs.
+                const node = app.graph?.getNodeById(parseInt(detail.node_id));
+                if (node) {
+                    const w = node.widgets?.find(w => w.name === "POSE_JSON");
+                    if (w) {
+                        w.value = "";
+                        if (w.element) w.element.value = "";
+                    }
+                }
+
                 const message = "Source pose changed — your edited pose has been cleared. " +
                     "Check that your prompt still matches the new pose.";
                 if (app.extensionManager?.toast?.add) {
