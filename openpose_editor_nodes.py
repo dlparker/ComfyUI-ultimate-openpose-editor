@@ -1,5 +1,6 @@
 import json
 import os
+import hashlib
 import datetime
 import torch
 import numpy as np
@@ -141,6 +142,19 @@ class OpenposeEditorNode:
         To revert to the live POSE_KEYPOINT (e.g. after changing the source
         image), clear the POSE_JSON textarea.
         '''
+        # Invalidate edited POSE_JSON if the upstream POSE_KEYPOINT has changed
+        # (e.g. user switched to a different source image). Instance variable
+        # persists across runs since ComfyUI keeps node instances alive.
+        if POSE_KEYPOINT is not None:
+            kp_hash = hashlib.md5(
+                json.dumps(POSE_KEYPOINT, sort_keys=True, default=str).encode()
+            ).hexdigest()
+            if (POSE_JSON
+                    and getattr(self, '_last_keypoint_hash', None) is not None
+                    and kp_hash != self._last_keypoint_hash):
+                POSE_JSON = ''  # new upstream pose — discard stale edits
+            self._last_keypoint_hash = kp_hash
+
         dbg = _open_debug_log()
         try:
           if POSE_JSON:
