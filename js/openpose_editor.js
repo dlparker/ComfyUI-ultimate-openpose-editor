@@ -177,6 +177,26 @@ if (app && ComfyDialog && $el && ComfyApp) {
                     });
                 });
             }
-        }
+        },
+
+        async setup() {
+            const api = window.comfyAPI?.app?.api;
+            if (!api) return;
+            api.addEventListener("openpose_editor_event", ({ detail }) => {
+                if (detail?.type !== "keypoint_invalidated") return;
+                const message = "Source pose changed — your edited pose has been cleared. " +
+                    "Check that your prompt still matches the new pose.";
+                if (app.extensionManager?.toast?.add) {
+                    app.extensionManager.toast.add({
+                        severity: "warn",
+                        summary: "Openpose Editor: Pose Reset",
+                        detail: message,
+                        life: 8000,
+                    });
+                } else {
+                    console.warn("[OpenposeEditor]", message);
+                }
+            });
+        },
     });
 }

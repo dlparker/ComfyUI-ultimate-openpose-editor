@@ -4,6 +4,7 @@ import hashlib
 import datetime
 import torch
 import numpy as np
+from server import PromptServer
 from .util import draw_pose_json, draw_pose, extend_scalelist, pose_normalized
 
 OpenposeJSON = dict
@@ -121,6 +122,7 @@ class OpenposeEditorNode:
                 "POSE_JSON": ("STRING", {"multiline": True}),
                 "POSE_KEYPOINT": ("POSE_KEYPOINT",{"default": None}),
             },
+            "hidden": {"unique_id": "UNIQUE_ID"},
         }
 
     RETURN_NAMES = ("POSE_IMAGE", "POSE_KEYPOINT", "POSE_JSON")
@@ -129,7 +131,7 @@ class OpenposeEditorNode:
     FUNCTION = "load_pose"
     CATEGORY = "ultimate-openpose"
 
-    def load_pose(self, show_body, show_face, show_hands, resolution_x, pose_marker_size, face_marker_size, hand_marker_size, hands_scale, body_scale, head_scale, overall_scale, scalelist_behavior, match_scalelist_method, only_scale_pose_index, POSE_JSON: str, POSE_KEYPOINT=None) -> tuple[OpenposeJSON]:
+    def load_pose(self, show_body, show_face, show_hands, resolution_x, pose_marker_size, face_marker_size, hand_marker_size, hands_scale, body_scale, head_scale, overall_scale, scalelist_behavior, match_scalelist_method, only_scale_pose_index, POSE_JSON: str, POSE_KEYPOINT=None, unique_id=None) -> tuple[OpenposeJSON]:
         '''
         priority output is: POSE_JSON > POSE_KEYPOINT
         priority edit is: POSE_JSON > POSE_KEYPOINT
@@ -153,6 +155,10 @@ class OpenposeEditorNode:
                     and getattr(self, '_last_keypoint_hash', None) is not None
                     and kp_hash != self._last_keypoint_hash):
                 POSE_JSON = ''  # new upstream pose — discard stale edits
+                PromptServer.instance.send_sync("openpose_editor_event", {
+                    "type": "keypoint_invalidated",
+                    "node_id": unique_id,
+                })
             self._last_keypoint_hash = kp_hash
 
         dbg = _open_debug_log()
