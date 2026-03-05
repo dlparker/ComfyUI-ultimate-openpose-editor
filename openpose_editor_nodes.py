@@ -131,15 +131,21 @@ class OpenposeEditorNode:
     def load_pose(self, show_body, show_face, show_hands, resolution_x, pose_marker_size, face_marker_size, hand_marker_size, hands_scale, body_scale, head_scale, overall_scale, scalelist_behavior, match_scalelist_method, only_scale_pose_index, POSE_JSON: str, POSE_KEYPOINT=None) -> tuple[OpenposeJSON]:
         '''
         priority output is: POSE_JSON > POSE_KEYPOINT
-        priority edit is: POSE_KEYPOINT > POSE_JSON
+        priority edit is: POSE_JSON > POSE_KEYPOINT
+
+        When POSE_JSON is non-empty (e.g. written back by the editor after
+        the user makes edits), it takes precedence over a connected
+        POSE_KEYPOINT. This means edits take effect immediately on the next
+        run without having to disconnect the POSE_KEYPOINT wire.
+
+        To revert to the live POSE_KEYPOINT (e.g. after changing the source
+        image), clear the POSE_JSON textarea.
         '''
         dbg = _open_debug_log()
         try:
           if POSE_JSON:
             POSE_JSON = POSE_JSON.replace("'",'"').replace('None','[]')
             POSE_PASS = POSE_JSON
-            if POSE_KEYPOINT is not None:
-                POSE_PASS = json.dumps(POSE_KEYPOINT,indent=4).replace("'",'"').replace('None','[]')
 
             if dbg:
                 dbg.write(f"code path: POSE_JSON present (POSE_KEYPOINT={'present' if POSE_KEYPOINT is not None else 'absent'})\n")
