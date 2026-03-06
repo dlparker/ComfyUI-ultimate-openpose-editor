@@ -187,7 +187,9 @@ if (app && ComfyDialog && $el && ComfyApp) {
 
                 // Clear the POSE_JSON widget so the stale edited pose
                 // doesn't get re-submitted on subsequent runs.
-                const node = app.graph?.getNodeById(parseInt(detail.node_id));
+                // Use string comparison to handle numeric vs string IDs across versions.
+                const nodeId = String(detail.node_id);
+                const node = app.graph?._nodes?.find(n => String(n.id) === nodeId);
                 if (node) {
                     const w = node.widgets?.find(w => w.name === "POSE_JSON");
                     if (w) {
@@ -196,17 +198,19 @@ if (app && ComfyDialog && $el && ComfyApp) {
                     }
                 }
 
-                const message = "Source pose changed — your edited pose has been cleared. " +
-                    "Check that your prompt still matches the new pose.";
-                if (app.extensionManager?.toast?.add) {
-                    app.extensionManager.toast.add({
-                        severity: "warn",
-                        summary: "Openpose Editor: Pose Reset",
-                        detail: message,
-                        life: 8000,
-                    });
-                } else {
-                    console.warn("[OpenposeEditor]", message);
+                if (detail.show_toast !== false) {
+                    const message = "Source pose changed — your edited pose has been cleared. " +
+                        "Check that your prompt still matches the new pose.";
+                    if (app.extensionManager?.toast?.add) {
+                        app.extensionManager.toast.add({
+                            severity: "warn",
+                            summary: "Openpose Editor: Pose Reset",
+                            detail: message,
+                            life: 8000,
+                        });
+                    } else {
+                        console.warn("[OpenposeEditor]", message);
+                    }
                 }
             });
         },

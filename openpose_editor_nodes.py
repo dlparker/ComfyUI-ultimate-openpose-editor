@@ -151,14 +151,31 @@ class OpenposeEditorNode:
             kp_hash = hashlib.md5(
                 json.dumps(POSE_KEYPOINT, sort_keys=True, default=str).encode()
             ).hexdigest()
-            if (POSE_JSON
-                    and getattr(self, '_last_keypoint_hash', None) is not None
-                    and kp_hash != self._last_keypoint_hash):
-                POSE_JSON = ''  # new upstream pose — discard stale edits
-                PromptServer.instance.send_sync("openpose_editor_event", {
-                    "type": "keypoint_invalidated",
-                    "node_id": unique_id,
-                })
+            prev_hash = getattr(self, '_last_keypoint_hash', None)
+            invalidated_hash = getattr(self, '_invalidated_for_hash', None)
+
+            if POSE_JSON:
+                if prev_hash is not None and kp_hash != prev_hash:
+                    # New upstream pose — first detection, notify user
+                    POSE_JSON = ''
+                    self._invalidated_for_hash = kp_hash
+                    PromptServer.instance.send_sync("openpose_editor_event", {
+                        "type": "keypoint_invalidated",
+                        "node_id": unique_id,
+                        "show_toast": True,
+                    })
+                elif invalidated_hash is not None and kp_hash == invalidated_hash:
+                    # Widget wasn't cleared yet — keep suppressing, nudge JS again
+                    POSE_JSON = ''
+                    PromptServer.instance.send_sync("openpose_editor_event", {
+                        "type": "keypoint_invalidated",
+                        "node_id": unique_id,
+                        "show_toast": False,
+                    })
+            elif invalidated_hash is not None:
+                # Widget is now empty — invalidation complete, reset flag
+                self._invalidated_for_hash = None
+
             self._last_keypoint_hash = kp_hash
 
         dbg = _open_debug_log()
