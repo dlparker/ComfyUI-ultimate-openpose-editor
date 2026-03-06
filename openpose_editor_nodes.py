@@ -156,25 +156,33 @@ class OpenposeEditorNode:
 
             if POSE_JSON:
                 if prev_hash is not None and kp_hash != prev_hash:
-                    # New upstream pose — first detection, notify user
-                    POSE_JSON = ''
+                    # New upstream pose — invalidate stale edits
                     self._invalidated_for_hash = kp_hash
+                    self._stale_json_hash = hashlib.md5(POSE_JSON.encode()).hexdigest()
+                    POSE_JSON = ''
                     PromptServer.instance.send_sync("openpose_editor_event", {
                         "type": "keypoint_invalidated",
                         "node_id": unique_id,
                         "show_toast": True,
                     })
-                elif invalidated_hash is not None and kp_hash == invalidated_hash:
-                    # Widget wasn't cleared yet — keep suppressing, nudge JS again
+                elif (invalidated_hash is not None
+                        and kp_hash == invalidated_hash
+                        and hashlib.md5(POSE_JSON.encode()).hexdigest() == getattr(self, '_stale_json_hash', None)):
+                    # Widget not cleared and content unchanged — suppress again, nudge JS
                     POSE_JSON = ''
                     PromptServer.instance.send_sync("openpose_editor_event", {
                         "type": "keypoint_invalidated",
                         "node_id": unique_id,
                         "show_toast": False,
                     })
+                else:
+                    # Content changed or different image — fresh edit, reset invalidation state
+                    self._invalidated_for_hash = None
+                    self._stale_json_hash = None
             elif invalidated_hash is not None:
-                # Widget is now empty — invalidation complete, reset flag
+                # Widget is now empty — invalidation complete, reset flags
                 self._invalidated_for_hash = None
+                self._stale_json_hash = None
 
             self._last_keypoint_hash = kp_hash
 
