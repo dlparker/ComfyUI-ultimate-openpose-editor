@@ -194,7 +194,8 @@ if (app && ComfyDialog && $el && ComfyApp) {
                     const w = node.widgets?.find(w => w.name === "POSE_JSON");
                     if (w) {
                         w.value = "";
-                        if (w.element) w.element.value = "";
+                        if (w.inputEl) w.inputEl.value = "";  // STRING widgets use inputEl
+                        if (w.element) w.element.value = "";  // fallback for other types
                     }
                 }
 
