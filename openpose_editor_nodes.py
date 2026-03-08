@@ -1,62 +1,11 @@
 import json
-import os
 import hashlib
-import datetime
 import torch
 import numpy as np
 from server import PromptServer
 from .util import draw_pose_json, draw_pose, extend_scalelist, pose_normalized
 
 OpenposeJSON = dict
-
-# ---------- debug logging ----------
-DEBUG_LOG_DIR = "Y:/comfyui_logs"
-
-def _pose_array_stats(arr, label):
-    if not arr:
-        return f"    {label}: empty"
-    confs = [arr[i] for i in range(2, len(arr), 3)]
-    x_vals = [arr[i] for i in range(0, len(arr), 3)]
-    y_vals = [arr[i] for i in range(1, len(arr), 3)]
-    sample = arr[:9]  # first 3 keypoints
-    return (
-        f"    {label}: {len(arr)//3} keypoints | "
-        f"x=[{min(x_vals):.4f}, {max(x_vals):.4f}] "
-        f"y=[{min(y_vals):.4f}, {max(y_vals):.4f}] "
-        f"conf=[{min(confs):.2f}, {max(confs):.2f}] | "
-        f"first 3 kpts: {[round(v,4) for v in sample]}"
-    )
-
-def _log_pose_json(f, stage, pose_json_str):
-    try:
-        data = json.loads(pose_json_str) if isinstance(pose_json_str, str) else pose_json_str
-        if isinstance(data, dict):
-            data = [data]
-        f.write(f"\n=== {stage} ===\n")
-        for img_i, image in enumerate(data):
-            f.write(f"  image[{img_i}]: canvas={image.get('canvas_width')}x{image.get('canvas_height')}\n")
-            for person_i, person in enumerate(image.get('people', [])):
-                f.write(f"  person[{person_i}]:\n")
-                for key in ['pose_keypoints_2d', 'face_keypoints_2d',
-                            'hand_left_keypoints_2d', 'hand_right_keypoints_2d']:
-                    arr = person.get(key)
-                    if arr:
-                        f.write(_pose_array_stats(arr, key) + "\n")
-                    else:
-                        f.write(f"    {key}: absent/empty\n")
-    except Exception as e:
-        f.write(f"  [error logging stage '{stage}': {e}]\n")
-
-def _open_debug_log():
-    try:
-        os.makedirs(DEBUG_LOG_DIR, exist_ok=True)
-        ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S_%f")
-        path = os.path.join(DEBUG_LOG_DIR, f"openpose_debug_{ts}.log")
-        return open(path, "w", encoding="utf-8")
-    except Exception as e:
-        print(f"[OpenposeEditor] Could not open debug log: {e}")
-        return None
-# ---------- end debug logging ----------
 
 class OpenposeEditorNode:
     @classmethod
@@ -186,29 +135,15 @@ class OpenposeEditorNode:
 
             self._last_keypoint_hash = kp_hash
 
-        dbg = _open_debug_log()
-        try:
-          if POSE_JSON:
+        if POSE_JSON:
             POSE_JSON = POSE_JSON.replace("'",'"').replace('None','[]')
             POSE_PASS = POSE_JSON
 
-            if dbg:
-                dbg.write(f"code path: POSE_JSON present (POSE_KEYPOINT={'present' if POSE_KEYPOINT is not None else 'absent'})\n")
-                _log_pose_json(dbg, "INPUT (POSE_PASS before pose_normalized)", POSE_PASS)
-
-            # parse the JSON
             hands_scalelist, body_scalelist, head_scalelist, overall_scalelist = extend_scalelist(
                 scalelist_behavior, POSE_PASS, hands_scale, body_scale, head_scale, overall_scale,
                 match_scalelist_method, only_scale_pose_index)
             normalized_pose_json = pose_normalized(POSE_PASS)
-
-            if dbg:
-                _log_pose_json(dbg, "AFTER pose_normalized", normalized_pose_json)
-
             pose_imgs, POSE_PASS_SCALED = draw_pose_json(normalized_pose_json, resolution_x, show_body, show_face, show_hands, pose_marker_size, face_marker_size, hand_marker_size, hands_scalelist, body_scalelist, head_scalelist, overall_scalelist)
-
-            if dbg:
-                _log_pose_json(dbg, "AFTER draw_pose_json (output/POSE_PASS_SCALED)", POSE_PASS_SCALED)
 
             if pose_imgs:
                 pose_imgs_np = np.array(pose_imgs).astype(np.float32) / 255
@@ -216,25 +151,14 @@ class OpenposeEditorNode:
                     "ui": {"POSE_JSON": [json.dumps(POSE_PASS_SCALED, indent=4)]},
                     "result": (torch.from_numpy(pose_imgs_np), POSE_PASS_SCALED, json.dumps(POSE_PASS_SCALED,indent=4))
                 }
-          elif POSE_KEYPOINT is not None:
+        elif POSE_KEYPOINT is not None:
             POSE_JSON = json.dumps(POSE_KEYPOINT,indent=4).replace("'",'"').replace('None','[]')
-
-            if dbg:
-                dbg.write("code path: POSE_KEYPOINT only (no POSE_JSON)\n")
-                _log_pose_json(dbg, "INPUT (POSE_KEYPOINT before pose_normalized)", POSE_JSON)
 
             hands_scalelist, body_scalelist, head_scalelist, overall_scalelist = extend_scalelist(
                 scalelist_behavior, POSE_JSON, hands_scale, body_scale, head_scale, overall_scale,
                 match_scalelist_method, only_scale_pose_index)
             normalized_pose_json = pose_normalized(POSE_JSON)
-
-            if dbg:
-                _log_pose_json(dbg, "AFTER pose_normalized", normalized_pose_json)
-
             pose_imgs, POSE_SCALED = draw_pose_json(normalized_pose_json, resolution_x, show_body, show_face, show_hands, pose_marker_size, face_marker_size, hand_marker_size, hands_scalelist, body_scalelist, head_scalelist, overall_scalelist)
-
-            if dbg:
-                _log_pose_json(dbg, "AFTER draw_pose_json (output/POSE_SCALED)", POSE_SCALED)
 
             if pose_imgs:
                 pose_imgs_np = np.array(pose_imgs).astype(np.float32) / 255
@@ -242,9 +166,6 @@ class OpenposeEditorNode:
                     "ui": {"POSE_JSON": [json.dumps(POSE_SCALED, indent=4)]},
                     "result": (torch.from_numpy(pose_imgs_np), POSE_SCALED, json.dumps(POSE_SCALED, indent=4))
                 }
-        finally:
-          if dbg:
-            dbg.close()
 
         # otherwise output blank images
         W=512
