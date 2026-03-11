@@ -61,6 +61,11 @@ class OpenposeEditorDialog extends ComfyDialog {
                 textAreaElement.value = JSON.stringify(event.data.poses);
 		ComfyApp.onClipspaceEditorClosed();
                 this.close();
+
+                // Enable the Clear Edit button now that edits exist
+                const clearBtn = targetNode.widgets?.find(w => w.name === "clear_edit_btn");
+                if (clearBtn) clearBtn.disabled = false;
+                app.graph.setDirtyCanvas(true, false);
             }
         });
     }
@@ -176,44 +181,44 @@ if (app && ComfyDialog && $el && ComfyApp) {
                         },
                     });
                 });
+
+                const onNodeCreated = nodeType.prototype.onNodeCreated;
+                nodeType.prototype.onNodeCreated = function () {
+                    onNodeCreated?.apply(this, arguments);
+
+                    const self = this;
+                    const clearBtn = this.addWidget("button", "Clear Edit", "clear_edit_btn", () => {
+                        const w = self.widgets?.find(w => w.name === "POSE_JSON");
+                        if (w) {
+                            w.value = "";
+                            if (w.inputEl) w.inputEl.value = "";
+                            if (w.element) w.element.value = "";
+                        }
+                        clearBtn.disabled = true;
+                        app.graph.setDirtyCanvas(true, false);
+                    });
+                    clearBtn.name = "clear_edit_btn";
+                    clearBtn.disabled = true;
+
+                    // Update button state after execution and on load
+                    const updateBtnState = () => {
+                        const w = self.widgets?.find(w => w.name === "POSE_JSON");
+                        clearBtn.disabled = !w?.value;
+                    };
+
+                    const origOnExecuted = this.onExecuted;
+                    this.onExecuted = function (message) {
+                        origOnExecuted?.apply(this, arguments);
+                        updateBtnState();
+                    };
+
+                    const origOnConfigure = this.onConfigure;
+                    this.onConfigure = function () {
+                        origOnConfigure?.apply(this, arguments);
+                        updateBtnState();
+                    };
+                };
             }
-        },
-
-        async setup() {
-            const api = window.comfyAPI?.app?.api;
-            if (!api) return;
-            api.addEventListener("openpose_editor_event", ({ detail }) => {
-                if (detail?.type !== "keypoint_invalidated") return;
-
-                // Clear the POSE_JSON widget so the stale edited pose
-                // doesn't get re-submitted on subsequent runs.
-                // Use string comparison to handle numeric vs string IDs across versions.
-                const nodeId = String(detail.node_id);
-                const node = app.graph?._nodes?.find(n => String(n.id) === nodeId);
-                if (node) {
-                    const w = node.widgets?.find(w => w.name === "POSE_JSON");
-                    if (w) {
-                        w.value = "";
-                        if (w.inputEl) w.inputEl.value = "";  // STRING widgets use inputEl
-                        if (w.element) w.element.value = "";  // fallback for other types
-                    }
-                }
-
-                if (detail.show_toast !== false) {
-                    const message = "Source pose changed — your edited pose has been cleared. " +
-                        "Check that your prompt still matches the new pose.";
-                    if (app.extensionManager?.toast?.add) {
-                        app.extensionManager.toast.add({
-                            severity: "warn",
-                            summary: "Openpose Editor: Pose Reset",
-                            detail: message,
-                            life: 8000,
-                        });
-                    } else {
-                        console.warn("[OpenposeEditor]", message);
-                    }
-                }
-            });
         },
     });
 }
